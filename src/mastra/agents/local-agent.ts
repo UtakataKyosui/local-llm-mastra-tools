@@ -1,6 +1,6 @@
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
-import { mcpClient } from '../mcp/client';
+import { listExternalMcpTools } from '../mcp/client';
 import { ollamaModel } from '../models/ollama';
 import { appleFmTool } from '../tools/apple-fm-tool';
 
@@ -12,6 +12,6 @@ export const localAgent = new Agent({
 Use the available tools when they help answer the request.
 Use apple-fm-generate when the user explicitly asks for Apple Intelligence.`,
   model: ollamaModel(),
-  tools: async () => ({ appleFmTool, ...(await mcpClient.listTools()) }),
+  tools: async () => ({ appleFmTool, ...(await listExternalMcpTools()) }),
   memory: new Memory(),
 });

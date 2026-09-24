@@ -15,7 +15,13 @@ export default function Header() {
           </Link>
         </h2>
 
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-4 text-sm font-semibold">
+          <Link to="/" className="nav-link" activeProps={{ className: 'nav-link is-active' }} activeOptions={{ exact: true }}>
+            Chat
+          </Link>
+          <Link to="/settings" className="nav-link" activeProps={{ className: 'nav-link is-active' }}>
+            Settings
+          </Link>
           <ThemeToggle />
         </div>
       </nav>

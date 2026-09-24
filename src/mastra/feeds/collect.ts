@@ -1,6 +1,6 @@
 import { XMLParser } from 'fast-xml-parser';
-import { ensureFeedsSchema, feedsDb } from './db';
-import { loadFeedSources } from './sources';
+import { appDb, ensureAppSchema } from '../storage/app-db';
+import { listFeedSources } from './sources';
 import type { FeedSource } from './sources';
 
 export interface FeedItem {
@@ -104,15 +104,17 @@ export interface CollectResult {
 }
 
 export const collectFeeds = async (sourceIds?: string[]): Promise<CollectResult[]> => {
-  await ensureFeedsSchema();
-  const sources = loadFeedSources().filter((s) => !sourceIds?.length || sourceIds.includes(s.id));
+  await ensureAppSchema();
+  const sources = (await listFeedSources()).filter(
+    (s) => s.enabled && (!sourceIds?.length || sourceIds.includes(s.id)),
+  );
   const collectedAt = new Date().toISOString();
 
   return Promise.all(
     sources.map(async (source): Promise<CollectResult> => {
       try {
         const items = (await fetchSource(source)).filter((item) => item.url && item.title);
-        await feedsDb.batch(
+        await appDb.batch(
           items.map((item) => ({
             sql: `INSERT INTO feed_items (url, source_id, source_name, title, summary, published_at, collected_at)
                   VALUES (?, ?, ?, ?, ?, ?, ?)

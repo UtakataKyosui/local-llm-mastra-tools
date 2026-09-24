@@ -11,7 +11,6 @@ dist-ssr
 .vinxi
 __unconfig*
 todos.json
-mcp-servers.json
 mastra.db*
 feeds.db*
-feed-sources.json
+app.db*

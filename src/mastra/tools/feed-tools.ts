@@ -2,7 +2,7 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { collectFeeds } from '../feeds/collect';
 import { feedStats, searchFeedItems } from '../feeds/search';
-import { loadFeedSources } from '../feeds/sources';
+import { listFeedSources } from '../feeds/sources';
 
 export const searchFeedsTool = createTool({
   id: 'search-feeds',
@@ -45,7 +45,7 @@ export const listFeedSourcesTool = createTool({
   execute: async () => {
     const stats = new Map((await feedStats()).map((s) => [s.sourceId, s]));
     return {
-      sources: loadFeedSources().map((s) => ({
+      sources: (await listFeedSources()).map((s) => ({
         id: s.id,
         name: s.name,
         items: Number(stats.get(s.id)?.items ?? 0),

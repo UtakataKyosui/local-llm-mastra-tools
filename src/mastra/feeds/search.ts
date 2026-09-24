@@ -1,4 +1,4 @@
-import { ensureFeedsSchema, feedsDb } from './db';
+import { appDb, ensureAppSchema } from '../storage/app-db';
 
 export interface SearchFeedOptions {
   keywords: string[];
@@ -17,7 +17,7 @@ export interface FeedSearchHit {
 
 // LIKE-based AND search. Chosen over FTS5 because the default tokenizer cannot split Japanese text.
 export const searchFeedItems = async ({ keywords, sourceIds, sinceDays, limit = 20 }: SearchFeedOptions) => {
-  await ensureFeedsSchema();
+  await ensureAppSchema();
   const where: string[] = [];
   const args: (string | number)[] = [];
 
@@ -35,7 +35,7 @@ export const searchFeedItems = async ({ keywords, sourceIds, sinceDays, limit = 
     args.push(new Date(Date.now() - sinceDays * 86_400_000).toISOString());
   }
 
-  const { rows } = await feedsDb.execute({
+  const { rows } = await appDb.execute({
     sql: `SELECT title, url, summary, source_name AS source, published_at AS publishedAt
           FROM feed_items
           ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
@@ -47,8 +47,8 @@ export const searchFeedItems = async ({ keywords, sourceIds, sinceDays, limit = 
 };
 
 export const feedStats = async () => {
-  await ensureFeedsSchema();
-  const { rows } = await feedsDb.execute(
+  await ensureAppSchema();
+  const { rows } = await appDb.execute(
     `SELECT source_id AS sourceId, source_name AS source, COUNT(*) AS items, MAX(collected_at) AS lastCollectedAt
      FROM feed_items GROUP BY source_id, source_name ORDER BY source_name`,
   );
