@@ -15,6 +15,13 @@
       "when": 1790269185375,
       "tag": "0001_seed_feed_sources",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1790269999417,
+      "tag": "0002_recommended_mcp_servers",
+      "breakpoints": true
     }
   ]
 }

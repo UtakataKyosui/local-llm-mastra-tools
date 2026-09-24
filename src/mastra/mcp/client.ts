@@ -1,12 +1,20 @@
 import { createHash } from 'node:crypto';
+import { resolve } from 'node:path';
 import { MCPClient } from '@mastra/mcp';
 import type { MastraMCPServerDefinition } from '@mastra/mcp';
 import { listMcpServers } from './servers';
 import type { McpServerConfig } from './servers';
 
+// Servers resolve relative paths in env against their own install directory, not the app,
+// so "./"-prefixed env values are made absolute against the app's working directory.
+const resolveEnv = (env: Record<string, string>) =>
+  Object.fromEntries(
+    Object.entries(env).map(([key, value]) => [key, value.startsWith('./') ? resolve(process.cwd(), value) : value]),
+  );
+
 const toDefinition = (server: McpServerConfig): MastraMCPServerDefinition =>
   server.transport === 'stdio'
-    ? { command: server.command, args: server.args, env: server.env }
+    ? { command: server.command, args: server.args, env: resolveEnv(server.env) }
     : { url: new URL(server.url), requestInit: { headers: server.headers } };
 
 let current: { key: string; client: MCPClient } | undefined;

@@ -14,3 +14,4 @@ todos.json
 mastra.db*
 feeds.db*
 app.db*
+mcp-memory.jsonl
