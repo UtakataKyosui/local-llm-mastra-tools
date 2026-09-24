@@ -1,14 +1,13 @@
 import { Mastra } from '@mastra/core/mastra';
 import { LibSQLStore } from '@mastra/libsql';
 import { MastraCompositeStore } from '@mastra/core/storage';
-import { weatherWorkflow } from './workflows/weather-workflow';
-import { weatherAgent } from './agents/weather-agent';
 import { localAgent } from './agents/local-agent';
+import { researchAgent } from './agents/research-agent';
+import { feedAgent } from './agents/feed-agent';
 import { localLlmMcpServer } from './mcp/server';
 
 export const mastra = new Mastra({
-  workflows: { weatherWorkflow },
-  agents: { weatherAgent, localAgent },
+  agents: { localAgent, researchAgent, feedAgent },
   mcpServers: { localLlm: localLlmMcpServer },
   storage: new MastraCompositeStore({
     id: 'composite-storage',

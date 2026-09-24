@@ -1,0 +1,9 @@
+{
+  "sources": [
+    { "id": "google-news-top", "name": "Google News (トップ)", "type": "rss", "url": "https://news.google.com/rss?hl=ja&gl=JP&ceid=JP:ja" },
+    { "id": "google-news-ai", "name": "Google News (AI 検索)", "type": "rss", "url": "https://news.google.com/rss/search?q=AI&hl=ja&gl=JP&ceid=JP:ja" },
+    { "id": "github-trending", "name": "GitHub Trending", "type": "github-trending", "since": "daily" },
+    { "id": "github-trending-ts", "name": "GitHub Trending (TypeScript)", "type": "github-trending", "language": "typescript", "since": "weekly" },
+    { "id": "hacker-news", "name": "Hacker News", "type": "rss", "url": "https://hnrss.org/frontpage" }
+  ]
+}

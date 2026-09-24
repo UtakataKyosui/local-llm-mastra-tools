@@ -11,10 +11,12 @@
     "preview": "rsbuild preview",
     "start": "srvx --prod -s ../client dist/server/index.js",
     "mcp:stdio": "tsx --env-file-if-exists=.env src/mastra/mcp/stdio.ts",
-    "typecheck": "tsc"
+    "typecheck": "tsc",
+    "feeds:collect": "tsx --env-file-if-exists=.env src/mastra/feeds/cli.ts"
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "^3.0.54",
+    "@libsql/client": "0.18.0",
     "@mastra/core": "^1.69.0",
     "@mastra/libsql": "^1.23.1",
     "@mastra/mcp": "^1.18.0",
@@ -24,6 +26,7 @@
     "@tanstack/react-router": "^1.170.31",
     "@tanstack/react-router-devtools": "^1.167.1",
     "@tanstack/react-start": "^1.168.48",
+    "fast-xml-parser": "^5.11.1",
     "hono": "^4.13.8",
     "mastra": "^1.31.1",
     "react": "^19.2.7",
