@@ -1,5 +1,7 @@
-import { z } from 'zod';
+import { asc, eq } from 'drizzle-orm';
 import { appDb, ensureAppSchema } from '../storage/app-db';
+import { feedSources } from '../storage/schema';
+import { z } from 'zod';
 
 export const feedSourceSchema = z.discriminatedUnion('type', [
   z.object({
@@ -21,55 +23,42 @@ export const feedSourceSchema = z.discriminatedUnion('type', [
 
 export type FeedSource = z.infer<typeof feedSourceSchema>;
 
-interface FeedSourceRow {
-  id: string;
-  name: string;
-  type: string;
-  url: string | null;
-  language: string | null;
-  since: string | null;
-  enabled: number;
-}
+type FeedSourceRow = typeof feedSources.$inferSelect;
 
 const fromRow = (row: FeedSourceRow): FeedSource =>
   row.type === 'rss'
-    ? { id: row.id, name: row.name, enabled: Boolean(row.enabled), type: 'rss', url: row.url ?? '' }
+    ? { id: row.id, name: row.name, enabled: row.enabled, type: 'rss', url: row.url ?? '' }
     : {
         id: row.id,
         name: row.name,
-        enabled: Boolean(row.enabled),
+        enabled: row.enabled,
         type: 'github-trending',
         language: row.language ?? undefined,
-        since: (row.since as 'daily' | 'weekly' | 'monthly' | null) ?? 'daily',
+        since: row.since ?? 'daily',
       };
 
 export const listFeedSources = async (): Promise<FeedSource[]> => {
   await ensureAppSchema();
-  const { rows } = await appDb.execute('SELECT * FROM feed_sources ORDER BY name');
-  return (rows as unknown as FeedSourceRow[]).map(fromRow);
+  const rows = await appDb.select().from(feedSources).orderBy(asc(feedSources.name));
+  return rows.map(fromRow);
 };
 
 export const saveFeedSource = async (source: FeedSource) => {
   await ensureAppSchema();
-  await appDb.execute({
-    sql: `INSERT INTO feed_sources (id, name, type, url, language, since, enabled)
-          VALUES (?, ?, ?, ?, ?, ?, ?)
-          ON CONFLICT(id) DO UPDATE SET
-            name = excluded.name, type = excluded.type, url = excluded.url,
-            language = excluded.language, since = excluded.since, enabled = excluded.enabled`,
-    args: [
-      source.id,
-      source.name,
-      source.type,
-      source.type === 'rss' ? source.url : null,
-      source.type === 'github-trending' ? (source.language ?? null) : null,
-      source.type === 'github-trending' ? source.since : null,
-      source.enabled ? 1 : 0,
-    ],
-  });
+  const values = {
+    id: source.id,
+    name: source.name,
+    type: source.type,
+    url: source.type === 'rss' ? source.url : null,
+    language: source.type === 'github-trending' ? (source.language ?? null) : null,
+    since: source.type === 'github-trending' ? source.since : null,
+    enabled: source.enabled,
+  };
+  const { id: _id, ...updates } = values;
+  await appDb.insert(feedSources).values(values).onConflictDoUpdate({ target: feedSources.id, set: updates });
 };
 
 export const deleteFeedSource = async (id: string) => {
   await ensureAppSchema();
-  await appDb.execute({ sql: 'DELETE FROM feed_sources WHERE id = ?', args: [id] });
+  await appDb.delete(feedSources).where(eq(feedSources.id, id));
 };

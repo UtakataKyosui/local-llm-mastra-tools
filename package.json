@@ -12,7 +12,10 @@
     "start": "srvx --prod -s ../client dist/server/index.js",
     "mcp:stdio": "tsx --env-file-if-exists=.env src/mastra/mcp/stdio.ts",
     "typecheck": "tsc",
-    "feeds:collect": "tsx --env-file-if-exists=.env src/mastra/feeds/cli.ts"
+    "feeds:collect": "tsx --env-file-if-exists=.env src/mastra/feeds/cli.ts",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "^3.0.54",
@@ -26,6 +29,7 @@
     "@tanstack/react-router": "^1.170.31",
     "@tanstack/react-router-devtools": "^1.167.1",
     "@tanstack/react-start": "^1.168.48",
+    "drizzle-orm": "^0.45.3",
     "fast-xml-parser": "^5.11.1",
     "hono": "^4.13.8",
     "mastra": "^1.31.1",
@@ -43,6 +47,7 @@
     "@types/node": "^24.12.4",
     "@types/react": "^19.2.15",
     "@types/react-dom": "^19.2.3",
+    "drizzle-kit": "^0.31.11",
     "solid-js": "^1.9.9",
     "tsx": "^4.23.15",
     "typescript": "^6.0.3"

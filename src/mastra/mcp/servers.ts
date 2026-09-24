@@ -1,5 +1,7 @@
+import { asc, eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { appDb, ensureAppSchema } from '../storage/app-db';
+import { mcpServers } from '../storage/schema';
 
 export const mcpServerSchema = z.discriminatedUnion('transport', [
   z.object({
@@ -23,23 +25,20 @@ export type McpServerConfig = z.infer<typeof mcpServerSchema>;
 
 export const listMcpServers = async (): Promise<McpServerConfig[]> => {
   await ensureAppSchema();
-  const { rows } = await appDb.execute('SELECT id, config, enabled FROM mcp_servers ORDER BY id');
-  return rows.map((row) =>
-    mcpServerSchema.parse({ ...JSON.parse(String(row.config)), id: row.id, enabled: Boolean(row.enabled) }),
-  );
+  const rows = await appDb.select().from(mcpServers).orderBy(asc(mcpServers.id));
+  return rows.map((row) => mcpServerSchema.parse({ ...(row.config as object), id: row.id, enabled: row.enabled }));
 };
 
 export const saveMcpServer = async (server: McpServerConfig) => {
   await ensureAppSchema();
   const { id, enabled, ...config } = server;
-  await appDb.execute({
-    sql: `INSERT INTO mcp_servers (id, config, enabled) VALUES (?, ?, ?)
-          ON CONFLICT(id) DO UPDATE SET config = excluded.config, enabled = excluded.enabled`,
-    args: [id, JSON.stringify(config), enabled ? 1 : 0],
-  });
+  await appDb
+    .insert(mcpServers)
+    .values({ id, config, enabled })
+    .onConflictDoUpdate({ target: mcpServers.id, set: { config, enabled } });
 };
 
 export const deleteMcpServer = async (id: string) => {
   await ensureAppSchema();
-  await appDb.execute({ sql: 'DELETE FROM mcp_servers WHERE id = ?', args: [id] });
+  await appDb.delete(mcpServers).where(eq(mcpServers.id, id));
 };

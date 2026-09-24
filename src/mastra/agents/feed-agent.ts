@@ -12,7 +12,8 @@ export const feedAgent = new Agent({
 - If there are no hits, retry with fewer keywords, synonyms, or the other language (Japanese <-> English).
 - If list-feed-sources shows no items or data older than a day, call collect-feeds first.
 - Answer in the user's language. For each item you mention, include its title, source, date and URL.
-- Only report items returned by the tools. Do not invent news.`,
+- Only report items returned by the tools. Do not invent news.
+- If a tool returns an error, tell the user what failed instead of answering from memory.`,
   model: ollamaModel(process.env.OLLAMA_RESEARCH_MODEL),
   tools: { searchFeedsTool, listFeedSourcesTool, collectFeedsTool },
   memory: new Memory(),

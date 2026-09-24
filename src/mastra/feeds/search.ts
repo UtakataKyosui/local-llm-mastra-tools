@@ -1,4 +1,7 @@
+import { and, count, desc, gte, inArray, max, or, sql } from 'drizzle-orm';
+import type { SQL } from 'drizzle-orm';
 import { appDb, ensureAppSchema } from '../storage/app-db';
+import { feedItems } from '../storage/schema';
 
 export interface SearchFeedOptions {
   keywords: string[];
@@ -7,50 +10,48 @@ export interface SearchFeedOptions {
   limit?: number;
 }
 
-export interface FeedSearchHit {
-  title: string;
-  url: string;
-  summary: string;
-  source: string;
-  publishedAt: string | null;
-}
+const publishedOrCollected = sql<string>`COALESCE(${feedItems.publishedAt}, ${feedItems.collectedAt})`;
+
+const containsLiteral = (column: typeof feedItems.title | typeof feedItems.summary, keyword: string) =>
+  sql`${column} LIKE ${`%${keyword.replace(/[\\%_]/g, (c) => `\\${c}`)}%`} ESCAPE '\\'`;
 
 // LIKE-based AND search. Chosen over FTS5 because the default tokenizer cannot split Japanese text.
 export const searchFeedItems = async ({ keywords, sourceIds, sinceDays, limit = 20 }: SearchFeedOptions) => {
   await ensureAppSchema();
-  const where: string[] = [];
-  const args: (string | number)[] = [];
-
-  for (const keyword of keywords.map((k) => k.trim()).filter(Boolean)) {
-    where.push(`(title LIKE ? ESCAPE '\\' OR summary LIKE ? ESCAPE '\\')`);
-    const pattern = `%${keyword.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
-    args.push(pattern, pattern);
-  }
-  if (sourceIds?.length) {
-    where.push(`source_id IN (${sourceIds.map(() => '?').join(', ')})`);
-    args.push(...sourceIds);
-  }
+  const conditions: (SQL | undefined)[] = keywords
+    .map((k) => k.trim())
+    .filter(Boolean)
+    .map((keyword) => or(containsLiteral(feedItems.title, keyword), containsLiteral(feedItems.summary, keyword)));
+  if (sourceIds?.length) conditions.push(inArray(feedItems.sourceId, sourceIds));
   if (sinceDays) {
-    where.push('COALESCE(published_at, collected_at) >= ?');
-    args.push(new Date(Date.now() - sinceDays * 86_400_000).toISOString());
+    conditions.push(gte(publishedOrCollected, new Date(Date.now() - sinceDays * 86_400_000).toISOString()));
   }
 
-  const { rows } = await appDb.execute({
-    sql: `SELECT title, url, summary, source_name AS source, published_at AS publishedAt
-          FROM feed_items
-          ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
-          ORDER BY COALESCE(published_at, collected_at) DESC
-          LIMIT ?`,
-    args: [...args, limit],
-  });
-  return rows as unknown as FeedSearchHit[];
+  return appDb
+    .select({
+      title: feedItems.title,
+      url: feedItems.url,
+      summary: feedItems.summary,
+      source: feedItems.sourceName,
+      publishedAt: feedItems.publishedAt,
+    })
+    .from(feedItems)
+    .where(and(...conditions))
+    .orderBy(desc(publishedOrCollected))
+    .limit(limit);
 };
 
 export const feedStats = async () => {
   await ensureAppSchema();
-  const { rows } = await appDb.execute(
-    `SELECT source_id AS sourceId, source_name AS source, COUNT(*) AS items, MAX(collected_at) AS lastCollectedAt
-     FROM feed_items GROUP BY source_id, source_name ORDER BY source_name`,
-  );
-  return rows as unknown as { sourceId: string; source: string; items: number; lastCollectedAt: string }[];
+  const rows = await appDb
+    .select({
+      sourceId: feedItems.sourceId,
+      source: feedItems.sourceName,
+      items: count(),
+      lastCollectedAt: max(feedItems.collectedAt),
+    })
+    .from(feedItems)
+    .groupBy(feedItems.sourceId, feedItems.sourceName)
+    .orderBy(feedItems.sourceName);
+  return rows.map((row) => ({ ...row, lastCollectedAt: row.lastCollectedAt ?? '' }));
 };

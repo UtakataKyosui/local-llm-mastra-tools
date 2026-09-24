@@ -1,5 +1,7 @@
+import { sql } from 'drizzle-orm';
 import { XMLParser } from 'fast-xml-parser';
 import { appDb, ensureAppSchema } from '../storage/app-db';
+import { feedItems } from '../storage/schema';
 import { listFeedSources } from './sources';
 import type { FeedSource } from './sources';
 
@@ -114,19 +116,30 @@ export const collectFeeds = async (sourceIds?: string[]): Promise<CollectResult[
     sources.map(async (source): Promise<CollectResult> => {
       try {
         const items = (await fetchSource(source)).filter((item) => item.url && item.title);
-        await appDb.batch(
-          items.map((item) => ({
-            sql: `INSERT INTO feed_items (url, source_id, source_name, title, summary, published_at, collected_at)
-                  VALUES (?, ?, ?, ?, ?, ?, ?)
-                  ON CONFLICT(url) DO UPDATE SET
-                    title = excluded.title,
-                    summary = excluded.summary,
-                    published_at = COALESCE(excluded.published_at, feed_items.published_at),
-                    collected_at = excluded.collected_at`,
-            args: [item.url, source.id, source.name, item.title, item.summary, item.publishedAt ?? null, collectedAt],
-          })),
-          'write',
-        );
+        if (items.length > 0) {
+          await appDb
+            .insert(feedItems)
+            .values(
+              items.map((item) => ({
+                url: item.url,
+                sourceId: source.id,
+                sourceName: source.name,
+                title: item.title,
+                summary: item.summary,
+                publishedAt: item.publishedAt ?? null,
+                collectedAt,
+              })),
+            )
+            .onConflictDoUpdate({
+              target: feedItems.url,
+              set: {
+                title: sql`excluded.title`,
+                summary: sql`excluded.summary`,
+                publishedAt: sql`COALESCE(excluded.published_at, ${feedItems.publishedAt})`,
+                collectedAt: sql`excluded.collected_at`,
+              },
+            });
+        }
         return { sourceId: source.id, fetched: items.length };
       } catch (error) {
         return { sourceId: source.id, fetched: 0, error: String(error) };
