@@ -5,4 +5,7 @@ import { tanstackStart } from '@tanstack/react-start/plugin/rsbuild';
 
 export default defineConfig({
   plugins: [pluginReact(), pluginTailwindcss(), tanstackStart()],
+  output: {
+    externals: [/^@libsql\//, 'libsql', /^@mastra\/libsql/],
+  },
 });
