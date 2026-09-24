@@ -1,7 +1,8 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { Link, createFileRoute } from '@tanstack/react-router';
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { getFeedStats, runFeedCollection } from '#/lib/feeds.functions';
+import { getMcpServers } from '#/lib/settings.functions';
 
 export const Route = createFileRoute('/')({
   component: Agents,
@@ -27,6 +28,7 @@ interface GenerateResponse {
 const RESOURCE_ID = 'web-ui';
 
 type FeedStats = Awaited<ReturnType<typeof getFeedStats>>;
+type McpServer = Awaited<ReturnType<typeof getMcpServers>>[number];
 
 function Agents() {
   const [agents, setAgents] = useState<AgentSummary[]>([]);
@@ -38,6 +40,21 @@ function Agents() {
   const bottomRef = useRef<HTMLDivElement>(null);
   const [feedStats, setFeedStats] = useState<FeedStats>([]);
   const [collecting, setCollecting] = useState(false);
+  const [mcpServers, setMcpServers] = useState<McpServer[]>([]);
+  const [selectedMcpIds, setSelectedMcpIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    getMcpServers()
+      .then((servers) => {
+        const enabled = servers.filter((server) => server.enabled);
+        setMcpServers(enabled);
+        setSelectedMcpIds(enabled.map((server) => server.id));
+      })
+      .catch((error) => console.error(error));
+  }, []);
+
+  const toggleMcp = (id: string) =>
+    setSelectedMcpIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
 
   useEffect(() => {
     getFeedStats()
@@ -68,7 +85,7 @@ function Agents() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, pending]);
 
-  const resetThread = (nextAgentId = agentId) => {
+  const switchAgent = (nextAgentId: string) => {
     setAgentId(nextAgentId);
     setThreadId(crypto.randomUUID());
     setMessages([]);
@@ -89,6 +106,7 @@ function Agents() {
         body: JSON.stringify({
           messages: [{ role: 'user', content }],
           memory: { thread: threadId, resource: RESOURCE_ID },
+          ...(agentId === 'local-agent' && { requestContext: { mcpServerIds: selectedMcpIds } }),
         }),
       });
       if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
@@ -118,7 +136,7 @@ function Agents() {
           </div>
           <select
             value={agentId}
-            onChange={(e) => resetThread(e.target.value)}
+            onChange={(e) => switchAgent(e.target.value)}
             className="rounded-xl border border-[var(--line)] bg-[var(--surface-strong)] px-3 py-2 text-sm text-[var(--sea-ink)]"
           >
             {agents.map((agent) => (
@@ -127,14 +145,36 @@ function Agents() {
               </option>
             ))}
           </select>
-          <button
-            type="button"
-            onClick={() => resetThread()}
-            className="rounded-xl border border-[var(--line)] px-3 py-2 text-sm text-[var(--sea-ink-soft)] hover:bg-[var(--link-bg-hover)]"
-          >
-            New thread
-          </button>
         </div>
+
+        {agentId === 'local-agent' && (
+          <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--sea-ink-soft)]">
+            <span>使用する MCP:</span>
+            {mcpServers.length === 0 ? (
+              <span>
+                有効な MCP サーバーがありません（
+                <Link to="/settings" className="underline">
+                  Settings
+                </Link>
+                で追加できます）
+              </span>
+            ) : (
+              mcpServers.map((server) => (
+                <label
+                  key={server.id}
+                  className="flex cursor-pointer items-center gap-1 rounded-full border border-[var(--line)] px-2 py-0.5"
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedMcpIds.includes(server.id)}
+                    onChange={() => toggleMcp(server.id)}
+                  />
+                  {server.id}
+                </label>
+              ))
+            )}
+          </div>
+        )}
 
         {agentId === 'feed-agent' && (
           <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--sea-ink-soft)]">

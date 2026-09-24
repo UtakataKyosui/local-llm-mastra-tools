@@ -12,6 +12,9 @@ export const localAgent = new Agent({
 Use the available tools when they help answer the request.
 Use apple-fm-generate when the user explicitly asks for Apple Intelligence.`,
   model: ollamaModel(),
-  tools: async () => ({ appleFmTool, ...(await listExternalMcpTools()) }),
+  tools: async ({ requestContext }) => {
+    const serverIds = requestContext.get('mcpServerIds') as string[] | undefined;
+    return { appleFmTool, ...(await listExternalMcpTools(serverIds)) };
+  },
   memory: new Memory(),
 });

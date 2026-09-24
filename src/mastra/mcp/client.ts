@@ -26,12 +26,16 @@ const getClient = async () => {
   return client;
 };
 
-export const listExternalMcpTools = async () => {
-  const { tools, errors } = await (await getClient()).listToolsWithErrors();
+export const listExternalMcpTools = async (serverIds?: string[]) => {
+  const { toolsets, errors } = await (await getClient()).listToolsetsWithErrors();
   for (const [serverId, error] of Object.entries(errors ?? {})) {
     console.error(`MCP server "${serverId}" failed to connect:`, error);
   }
-  return tools;
+  return Object.fromEntries(
+    Object.entries(toolsets)
+      .filter(([serverId]) => !serverIds || serverIds.includes(serverId))
+      .flatMap(([serverId, tools]) => Object.entries(tools).map(([name, tool]) => [`${serverId}_${name}`, tool])),
+  );
 };
 
 export const testMcpServer = async (server: McpServerConfig) => {
