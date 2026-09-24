@@ -1,6 +1,5 @@
-@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Manrope:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap');
 @import 'tailwindcss';
-@plugin "@tailwindcss/typography";
 
 @theme {
   --font-sans: 'Manrope', ui-sans-serif, system-ui, sans-serif;
@@ -164,10 +163,6 @@ pre code {
   margin-inline: auto;
 }
 
-.display-title {
-  font-family: 'Fraunces', Georgia, serif;
-}
-
 .island-shell {
   border: 1px solid var(--line);
   background: linear-gradient(165deg, var(--surface-strong), var(--surface));
@@ -176,23 +171,6 @@ pre code {
     0 22px 44px rgba(30, 90, 72, 0.1),
     0 6px 18px rgba(23, 58, 64, 0.08);
   backdrop-filter: blur(4px);
-}
-
-.feature-card {
-  background: linear-gradient(
-    165deg,
-    color-mix(in oklab, var(--surface-strong) 93%, white 7%),
-    var(--surface)
-  );
-  box-shadow:
-    0 1px 0 var(--inset-glint) inset,
-    0 18px 34px rgba(30, 90, 72, 0.1),
-    0 4px 14px rgba(23, 58, 64, 0.06);
-}
-
-.feature-card:hover {
-  transform: translateY(-2px);
-  border-color: color-mix(in oklab, var(--lagoon-deep) 35%, var(--line));
 }
 
 button,
@@ -247,25 +225,5 @@ a {
 @media (max-width: 640px) {
   .nav-link::after {
     bottom: -4px;
-  }
-}
-
-.site-footer {
-  border-top: 1px solid var(--line);
-  background: color-mix(in oklab, var(--header-bg) 84%, transparent 16%);
-}
-
-.rise-in {
-  animation: rise-in 700ms cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-
-@keyframes rise-in {
-  from {
-    opacity: 0;
-    transform: translateY(12px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
   }
 }
