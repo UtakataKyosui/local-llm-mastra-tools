@@ -19,6 +19,9 @@ export default function Header() {
           <Link to="/" className="nav-link" activeProps={{ className: 'nav-link is-active' }} activeOptions={{ exact: true }}>
             Chat
           </Link>
+          <Link to="/custom-chat" className="nav-link" activeProps={{ className: 'nav-link is-active' }}>
+            Custom Chat
+          </Link>
           <Link to="/settings" className="nav-link" activeProps={{ className: 'nav-link is-active' }}>
             Settings
           </Link>

@@ -10,12 +10,18 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as CustomChatRouteImport } from './routes/custom-chat'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as ApiSplatRouteImport } from './routes/api/$'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CustomChatRoute = CustomChatRouteImport.update({
+  id: '/custom-chat',
+  path: '/custom-chat',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SettingsRoute = SettingsRouteImport.update({
@@ -31,30 +37,34 @@ const ApiSplatRoute = ApiSplatRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/custom-chat': typeof CustomChatRoute
   '/settings': typeof SettingsRoute
   '/api/$': typeof ApiSplatRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/custom-chat': typeof CustomChatRoute
   '/settings': typeof SettingsRoute
   '/api/$': typeof ApiSplatRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/custom-chat': typeof CustomChatRoute
   '/settings': typeof SettingsRoute
   '/api/$': typeof ApiSplatRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/settings' | '/api/$'
+  fullPaths: '/' | '/custom-chat' | '/settings' | '/api/$'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/settings' | '/api/$'
-  id: '__root__' | '/' | '/settings' | '/api/$'
+  to: '/' | '/custom-chat' | '/settings' | '/api/$'
+  id: '__root__' | '/' | '/custom-chat' | '/settings' | '/api/$'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  CustomChatRoute: typeof CustomChatRoute
   SettingsRoute: typeof SettingsRoute
   ApiSplatRoute: typeof ApiSplatRoute
 }
@@ -66,6 +76,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/custom-chat': {
+      id: '/custom-chat'
+      path: '/custom-chat'
+      fullPath: '/custom-chat'
+      preLoaderRoute: typeof CustomChatRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/settings': {
@@ -87,6 +104,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  CustomChatRoute: CustomChatRoute,
   SettingsRoute: SettingsRoute,
   ApiSplatRoute: ApiSplatRoute,
 }
