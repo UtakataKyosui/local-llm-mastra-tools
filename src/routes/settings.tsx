@@ -3,13 +3,18 @@ import { useEffect, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 import {
   checkMcpServer,
+  getCustomAgents,
   getFeedSources,
   getMcpServers,
+  removeCustomAgent,
   removeFeedSource,
   removeMcpServer,
+  upsertCustomAgent,
   upsertFeedSource,
   upsertMcpServer,
 } from '#/lib/settings.functions';
+import { BUILTIN_TOOL_LABELS } from '#/mastra/agents/custom-agent-schema';
+import type { BuiltinToolName } from '#/mastra/agents/custom-agent-schema';
 
 export const Route = createFileRoute('/settings')({
   component: Settings,
@@ -17,6 +22,7 @@ export const Route = createFileRoute('/settings')({
 
 type FeedSource = Awaited<ReturnType<typeof getFeedSources>>[number];
 type McpServer = Awaited<ReturnType<typeof getMcpServers>>[number];
+type CustomAgent = Awaited<ReturnType<typeof getCustomAgents>>[number];
 
 const inputClass =
   'min-w-0 rounded-xl border border-[var(--line)] bg-[var(--surface-strong)] px-3 py-2 text-sm text-[var(--sea-ink)]';
@@ -49,6 +55,7 @@ function Settings() {
     <main className="page-wrap flex flex-col gap-6 px-4 py-8">
       <FeedSourcesSection />
       <McpServersSection />
+      <CustomAgentsSection />
     </main>
   );
 }
@@ -479,6 +486,200 @@ function McpServersSection() {
         </div>
       </form>
       {testResult && <p className="m-0 whitespace-pre-wrap text-sm text-[var(--sea-ink-soft)]">{testResult}</p>}
+      {error && <p className="m-0 whitespace-pre-wrap text-sm text-red-600">{error}</p>}
+    </Section>
+  );
+}
+
+const emptyAgentForm = {
+  id: '',
+  name: '',
+  description: '',
+  instructions: '',
+  model: '',
+  mcpServerIds: [] as string[],
+  builtinTools: [] as BuiltinToolName[],
+  maxSteps: '',
+};
+
+const builtinToolNames = Object.keys(BUILTIN_TOOL_LABELS) as BuiltinToolName[];
+
+const toggle = <T,>(list: T[], value: T) => (list.includes(value) ? list.filter((x) => x !== value) : [...list, value]);
+
+function CustomAgentsSection() {
+  const [agents, setAgents] = useState<CustomAgent[]>([]);
+  const [servers, setServers] = useState<McpServer[]>([]);
+  const [form, setForm] = useState(emptyAgentForm);
+  const [editing, setEditing] = useState(false);
+  const [error, setError] = useState('');
+
+  const reload = () =>
+    getCustomAgents()
+      .then(setAgents)
+      .catch((e) => setError(errorMessage(e)));
+
+  useEffect(() => {
+    reload();
+    getMcpServers()
+      .then(setServers)
+      .catch((e) => setError(errorMessage(e)));
+  }, []);
+
+  const reset = () => {
+    setForm(emptyAgentForm);
+    setEditing(false);
+  };
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    setError('');
+    try {
+      await upsertCustomAgent({
+        data: { ...form, maxSteps: form.maxSteps === '' ? null : Number(form.maxSteps) },
+      });
+      await reload();
+      reset();
+    } catch (e) {
+      setError(errorMessage(e));
+    }
+  };
+
+  const edit = (agent: CustomAgent) => {
+    setEditing(true);
+    setForm({ ...agent, maxSteps: agent.maxSteps === null ? '' : String(agent.maxSteps) });
+  };
+
+  const remove = async (id: string) => {
+    setError('');
+    try {
+      await removeCustomAgent({ data: { id } });
+      await reload();
+      if (form.id === id) reset();
+    } catch (e) {
+      setError(errorMessage(e));
+    }
+  };
+
+  return (
+    <Section
+      kicker="Custom Agents"
+      description="指示文と使う MCP サーバー・ツールを選んで独自の Agent を作れます。保存するとチャットの Agent 一覧に表示されます。"
+    >
+      {agents.length === 0 && <p className="m-0 text-sm text-[var(--sea-ink-soft)]">まだ作成されていません。</p>}
+      <ul className="m-0 flex list-none flex-col gap-2 p-0">
+        {agents.map((agent) => (
+          <li
+            key={agent.id}
+            className="flex flex-wrap items-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--surface)] px-3 py-2 text-sm"
+          >
+            <span className="font-semibold text-[var(--sea-ink)]">{agent.name}</span>
+            <span className="font-mono text-xs text-[var(--sea-ink-soft)]">{agent.id}</span>
+            <span className="min-w-0 flex-1 truncate text-xs text-[var(--sea-ink-soft)]">
+              {[
+                ...agent.mcpServerIds.map((id) => `MCP: ${id}`),
+                ...agent.builtinTools.map((name) => BUILTIN_TOOL_LABELS[name]),
+              ].join(' / ') || 'ツールなし'}
+            </span>
+            <button type="button" className={buttonClass} onClick={() => edit(agent)}>
+              編集
+            </button>
+            <button type="button" className={buttonClass} onClick={() => remove(agent.id)}>
+              削除
+            </button>
+          </li>
+        ))}
+      </ul>
+
+      <form onSubmit={submit} className="grid gap-2 sm:grid-cols-2">
+        <input
+          className={inputClass}
+          placeholder="id (例: translator)"
+          value={form.id}
+          disabled={editing}
+          onChange={(e) => setForm({ ...form, id: e.target.value })}
+          required
+        />
+        <input
+          className={inputClass}
+          placeholder="名前 (例: 翻訳アシスタント)"
+          value={form.name}
+          onChange={(e) => setForm({ ...form, name: e.target.value })}
+          required
+        />
+        <input
+          className={`${inputClass} sm:col-span-2`}
+          placeholder="説明 (チャット画面に表示されます)"
+          value={form.description}
+          onChange={(e) => setForm({ ...form, description: e.target.value })}
+        />
+        <textarea
+          className={`${inputClass} sm:col-span-2`}
+          rows={5}
+          placeholder="指示文 (例: あなたは翻訳アシスタントです。入力された日本語を自然な英語に訳してください。)"
+          value={form.instructions}
+          onChange={(e) => setForm({ ...form, instructions: e.target.value })}
+          required
+        />
+        <input
+          className={inputClass}
+          placeholder="Ollama モデル (空なら既定のモデル)"
+          value={form.model}
+          onChange={(e) => setForm({ ...form, model: e.target.value })}
+        />
+        <input
+          className={inputClass}
+          type="number"
+          min={1}
+          max={50}
+          placeholder="最大ステップ数 (空なら既定)"
+          value={form.maxSteps}
+          onChange={(e) => setForm({ ...form, maxSteps: e.target.value })}
+        />
+        <fieldset className="m-0 flex flex-wrap items-center gap-2 border-0 p-0 text-xs text-[var(--sea-ink-soft)] sm:col-span-2">
+          <legend className="mb-1 p-0">MCP サーバー</legend>
+          {servers.length === 0 && <span>登録された MCP サーバーがありません。</span>}
+          {servers.map((server) => (
+            <label
+              key={server.id}
+              className="flex cursor-pointer items-center gap-1 rounded-full border border-[var(--line)] px-2 py-0.5"
+            >
+              <input
+                type="checkbox"
+                checked={form.mcpServerIds.includes(server.id)}
+                onChange={() => setForm({ ...form, mcpServerIds: toggle(form.mcpServerIds, server.id) })}
+              />
+              {server.id}
+              {!server.enabled && '（無効）'}
+            </label>
+          ))}
+        </fieldset>
+        <fieldset className="m-0 flex flex-wrap items-center gap-2 border-0 p-0 text-xs text-[var(--sea-ink-soft)] sm:col-span-2">
+          <legend className="mb-1 p-0">組み込みツール</legend>
+          {builtinToolNames.map((name) => (
+            <label
+              key={name}
+              className="flex cursor-pointer items-center gap-1 rounded-full border border-[var(--line)] px-2 py-0.5"
+            >
+              <input
+                type="checkbox"
+                checked={form.builtinTools.includes(name)}
+                onChange={() => setForm({ ...form, builtinTools: toggle(form.builtinTools, name) })}
+              />
+              {BUILTIN_TOOL_LABELS[name]}
+            </label>
+          ))}
+        </fieldset>
+        <div className="flex flex-wrap gap-2 sm:col-span-2">
+          <button type="submit" className={primaryButtonClass}>
+            {editing ? '更新' : '作成'}
+          </button>
+          {editing && (
+            <button type="button" className={buttonClass} onClick={reset}>
+              キャンセル
+            </button>
+          )}
+        </div>
+      </form>
       {error && <p className="m-0 whitespace-pre-wrap text-sm text-red-600">{error}</p>}
     </Section>
   );
