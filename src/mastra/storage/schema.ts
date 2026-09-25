@@ -27,6 +27,17 @@ export const feedItems = sqliteTable(
   ],
 );
 
+export const customAgents = sqliteTable('custom_agents', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  description: text('description').notNull().default(''),
+  instructions: text('instructions').notNull(),
+  model: text('model').notNull().default(''),
+  mcpServerIds: text('mcp_server_ids', { mode: 'json' }).$type<string[]>().notNull(),
+  builtinTools: text('builtin_tools', { mode: 'json' }).$type<string[]>().notNull(),
+  maxSteps: integer('max_steps'),
+});
+
 export const mcpServers = sqliteTable('mcp_servers', {
   id: text('id').primaryKey(),
   config: text('config', { mode: 'json' }).notNull(),

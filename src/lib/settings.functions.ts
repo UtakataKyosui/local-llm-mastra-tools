@@ -1,5 +1,6 @@
 import { createServerFn } from '@tanstack/react-start';
 import { z } from 'zod';
+import { customAgentSchema } from '../mastra/agents/custom-agent-schema';
 import { feedSourceSchema } from '../mastra/feeds/sources';
 import { mcpServerSchema } from '../mastra/mcp/servers';
 
@@ -41,6 +42,25 @@ export const removeMcpServer = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     const { deleteMcpServer } = await import('../mastra/mcp/servers');
     await deleteMcpServer(data.id);
+  });
+
+export const getCustomAgents = createServerFn({ method: 'GET' }).handler(async () => {
+  const { listCustomAgents } = await import('../mastra/agents/custom-agents');
+  return listCustomAgents();
+});
+
+export const upsertCustomAgent = createServerFn({ method: 'POST' })
+  .inputValidator(customAgentSchema)
+  .handler(async ({ data }) => {
+    const { saveCustomAgent } = await import('../mastra/agents/custom-agents');
+    await saveCustomAgent(data);
+  });
+
+export const removeCustomAgent = createServerFn({ method: 'POST' })
+  .inputValidator(idInput)
+  .handler(async ({ data }) => {
+    const { deleteCustomAgent } = await import('../mastra/agents/custom-agents');
+    await deleteCustomAgent(data.id);
   });
 
 export const checkMcpServer = createServerFn({ method: 'POST' })
