@@ -16,6 +16,8 @@ import {
   upsertFeedSource,
   upsertMcpServer,
 } from '#/lib/settings.functions';
+import { OLLAMA_TOOL_MODELS, OLLAMA_TOOL_MODELS_FETCHED_AT, OLLAMA_TOOL_MODELS_SOURCE } from '#/lib/ollama-tool-models';
+import type { OllamaToolModel } from '#/lib/ollama-tool-models';
 import { BUILTIN_TOOL_LABELS } from '#/mastra/agents/custom-agent-schema';
 import type { BuiltinToolName } from '#/mastra/agents/custom-agent-schema';
 
@@ -704,6 +706,7 @@ function CustomAgentsSection() {
               {modelsWithoutTools.join(', ')} はツールに対応していないため、MCP・組み込みツールを使うとエラーになります。
             </p>
           )}
+          <ToolModelCatalog installedModels={ollamaModels.models.map((model) => model.name)} />
         </div>
         <MultiSelect
           label="MCP サーバー"
@@ -760,5 +763,101 @@ function CustomAgentsSection() {
       </form>
       {error && <p className="m-0 whitespace-pre-wrap text-sm text-red-600">{error}</p>}
     </Section>
+  );
+}
+
+// Ollama's tags are "<name>:<tag>"; library entries are keyed by <name> only.
+const baseModelName = (model: string) => model.split(':')[0];
+
+const isCloudOnly = (model: OllamaToolModel) => model.cloud && model.sizes.length === 0;
+
+function ToolModelCatalog({ installedModels }: { installedModels: string[] }) {
+  const [query, setQuery] = useState('');
+  const [localOnly, setLocalOnly] = useState(true);
+
+  const installedTags = new Map<string, string[]>();
+  for (const model of installedModels) {
+    const base = baseModelName(model);
+    installedTags.set(base, [...(installedTags.get(base) ?? []), model]);
+  }
+
+  const q = query.trim().toLowerCase();
+  const rows = OLLAMA_TOOL_MODELS.filter(
+    (model) =>
+      (!localOnly || !isCloudOnly(model)) &&
+      (q === '' || model.name.toLowerCase().includes(q) || model.description.toLowerCase().includes(q)),
+  );
+
+  return (
+    <details className="mt-2 rounded-xl border border-[var(--line)] bg-[var(--surface)] px-3 py-2 text-xs text-[var(--sea-ink-soft)]">
+      <summary className="cursor-pointer font-semibold text-[var(--sea-ink)]">
+        Ollama ライブラリのツール対応モデル（未インストールを含む {OLLAMA_TOOL_MODELS.length} 件）
+      </summary>
+      <p className="m-0 mt-2">
+        <a href={OLLAMA_TOOL_MODELS_SOURCE} target="_blank" rel="noopener noreferrer" className="underline">
+          ollama.com の tools カテゴリ
+        </a>
+        から {OLLAMA_TOOL_MODELS_FETCHED_AT} 時点で取得。更新は <code>pnpm models:update-tools</code>。
+        使うには <code>ollama pull &lt;モデル&gt;:&lt;サイズ&gt;</code> でインストールしてください。
+      </p>
+      <div className="mt-2 flex flex-wrap items-center gap-3">
+        <input
+          className={`${inputClass} flex-1`}
+          placeholder="モデル名・説明で絞り込み"
+          aria-label="ツール対応モデルを絞り込み"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
+        <label className="flex items-center gap-1">
+          <input type="checkbox" checked={localOnly} onChange={(e) => setLocalOnly(e.target.checked)} />
+          ローカルで動くモデルだけ（cloud 専用を除く）
+        </label>
+      </div>
+      <div className="mt-2 max-h-80 overflow-auto">
+        <table className="w-full border-collapse text-left">
+          <thead className="sticky top-0 bg-[var(--surface-strong)]">
+            <tr>
+              <th className="px-2 py-1">モデル</th>
+              <th className="px-2 py-1">サイズ</th>
+              <th className="px-2 py-1">機能</th>
+              <th className="px-2 py-1">Pulls</th>
+              <th className="px-2 py-1">状態</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((model) => {
+              const installed = installedTags.get(model.name);
+              return (
+                <tr key={model.name} className="border-t border-[var(--line)] align-top">
+                  <td className="px-2 py-1">
+                    <span className="font-mono font-semibold text-[var(--sea-ink)]">{model.name}</span>
+                    <span className="block max-w-md">{model.description}</span>
+                  </td>
+                  <td className="px-2 py-1">{[...model.sizes, ...(model.cloud ? ['cloud'] : [])].join(', ')}</td>
+                  <td className="px-2 py-1">{model.capabilities.join(', ')}</td>
+                  <td className="px-2 py-1">{model.pulls}</td>
+                  <td className="px-2 py-1">
+                    {installed ? (
+                      <span className="text-[var(--lagoon-deep)]">インストール済み ({installed.join(', ')})</span>
+                    ) : isCloudOnly(model) ? (
+                      <code>ollama run {model.name}:cloud</code>
+                    ) : (
+                      <code>ollama pull {model.name}</code>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+            {rows.length === 0 && (
+              <tr>
+                <td colSpan={5} className="px-2 py-2">
+                  該当するモデルがありません。
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </details>
   );
 }

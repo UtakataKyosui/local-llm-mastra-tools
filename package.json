@@ -15,7 +15,8 @@
     "feeds:collect": "tsx --env-file-if-exists=.env src/mastra/feeds/cli.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "models:update-tools": "python3 scripts/update-ollama-tool-models.py"
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "^3.0.54",
