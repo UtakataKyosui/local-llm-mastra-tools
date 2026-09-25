@@ -1,6 +1,15 @@
 import { Link, createFileRoute } from '@tanstack/react-router';
 import { useEffect, useRef, useState } from 'react';
-import type { FormEvent } from 'react';
+import type { FormEvent, KeyboardEvent } from 'react';
+import { getAgentTools } from '#/lib/agent-tools.functions';
+import {
+  PRESET_PROMPTS,
+  applySuggestion,
+  filterSuggestions,
+  findMentionedIds,
+  findTrigger,
+} from '#/lib/chat-suggestions';
+import type { Suggestion } from '#/lib/chat-suggestions';
 import { getFeedStats, runFeedCollection } from '#/lib/feeds.functions';
 import { getMcpServers } from '#/lib/settings.functions';
 
@@ -26,6 +35,7 @@ interface GenerateResponse {
 }
 
 const RESOURCE_ID = 'web-ui';
+const MAX_SUGGESTIONS = 8;
 
 type FeedStats = Awaited<ReturnType<typeof getFeedStats>>;
 type McpServer = Awaited<ReturnType<typeof getMcpServers>>[number];
@@ -42,6 +52,12 @@ function Agents() {
   const [collecting, setCollecting] = useState(false);
   const [mcpServers, setMcpServers] = useState<McpServer[]>([]);
   const [selectedMcpIds, setSelectedMcpIds] = useState<string[]>([]);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [caret, setCaret] = useState(0);
+  const [focused, setFocused] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [agentTools, setAgentTools] = useState<Suggestion[]>([]);
 
   useEffect(() => {
     getMcpServers()
@@ -82,8 +98,75 @@ function Agents() {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+    getAgentTools({ data: { agentId, mcpServerIds: agentId === 'local-agent' ? selectedMcpIds : undefined } })
+      .then((tools) => {
+        if (!cancelled) setAgentTools(tools.map((tool) => ({ value: tool.name, description: tool.description })));
+      })
+      .catch((error) => {
+        console.error(error);
+        if (!cancelled) setAgentTools([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [agentId, selectedMcpIds]);
+
+  useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, pending]);
+
+  const presetPrompts = PRESET_PROMPTS[agentId] ?? [];
+  const trigger = findTrigger(input, caret, agentId === 'local-agent' ? ['@', '/'] : ['/']);
+  const suggestions: Suggestion[] =
+    dismissed || !focused
+      ? []
+      : trigger
+        ? filterSuggestions(
+            trigger.char === '@'
+              ? mcpServers.map((server) => ({ value: server.id, description: server.transport }))
+              : agentTools,
+            trigger.query,
+          ).slice(0, MAX_SUGGESTIONS)
+        : input === ''
+          ? presetPrompts.map((value) => ({ value }))
+          : [];
+  const highlighted = Math.min(activeIndex, suggestions.length - 1);
+
+  const selectSuggestion = (suggestion: Suggestion) => {
+    const next = trigger
+      ? applySuggestion(input, trigger, suggestion.value)
+      : { text: suggestion.value, caret: suggestion.value.length };
+    setInput(next.text);
+    setCaret(next.caret);
+    setActiveIndex(0);
+    requestAnimationFrame(() => {
+      inputRef.current?.focus();
+      inputRef.current?.setSelectionRange(next.caret, next.caret);
+    });
+  };
+
+  const handleInputKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.nativeEvent.isComposing) return;
+    if (suggestions.length === 0) {
+      if (event.key === 'Tab' && input === '' && presetPrompts.length > 0) {
+        event.preventDefault();
+        selectSuggestion({ value: presetPrompts[0] });
+      }
+      return;
+    }
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      const step = event.key === 'ArrowDown' ? 1 : -1;
+      setActiveIndex((highlighted + step + suggestions.length) % suggestions.length);
+    } else if (event.key === 'Enter' || event.key === 'Tab') {
+      event.preventDefault();
+      selectSuggestion(suggestions[highlighted]);
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      setDismissed(true);
+    }
+  };
 
   const switchAgent = (nextAgentId: string) => {
     setAgentId(nextAgentId);
@@ -97,8 +180,13 @@ function Agents() {
     if (!content || pending) return;
 
     setInput('');
+    setDismissed(true);
     setMessages((prev) => [...prev, { role: 'user', content }]);
     setPending(true);
+    const mentionedMcpIds = findMentionedIds(
+      content,
+      mcpServers.map((server) => server.id),
+    );
     try {
       const res = await fetch(`/api/agents/${agentId}/generate`, {
         method: 'POST',
@@ -106,7 +194,9 @@ function Agents() {
         body: JSON.stringify({
           messages: [{ role: 'user', content }],
           memory: { thread: threadId, resource: RESOURCE_ID },
-          ...(agentId === 'local-agent' && { requestContext: { mcpServerIds: selectedMcpIds } }),
+          ...(agentId === 'local-agent' && {
+            requestContext: { mcpServerIds: mentionedMcpIds.length > 0 ? mentionedMcpIds : selectedMcpIds },
+          }),
         }),
       });
       if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
@@ -233,12 +323,63 @@ function Agents() {
         </div>
 
         <form onSubmit={send} className="flex gap-2">
-          <input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="例: 最近話題の AI 関連リポジトリは？"
-            className="min-w-0 flex-1 rounded-xl border border-[var(--line)] bg-[var(--surface-strong)] px-4 py-2 text-sm text-[var(--sea-ink)]"
-          />
+          <div className="relative min-w-0 flex-1">
+            <input
+              ref={inputRef}
+              value={input}
+              onChange={(e) => {
+                setInput(e.target.value);
+                setCaret(e.target.selectionStart ?? e.target.value.length);
+                setDismissed(false);
+                setActiveIndex(0);
+              }}
+              onSelect={(e) => setCaret(e.currentTarget.selectionStart ?? 0)}
+              onFocus={() => {
+                setFocused(true);
+                setDismissed(false);
+              }}
+              onBlur={() => setFocused(false)}
+              onKeyDown={handleInputKeyDown}
+              role="combobox"
+              aria-autocomplete="list"
+              aria-expanded={suggestions.length > 0}
+              aria-controls="chat-suggestions"
+              aria-activedescendant={suggestions.length > 0 ? `chat-suggestion-${highlighted}` : undefined}
+              placeholder={`${presetPrompts[0] ? `例: ${presetPrompts[0]}（Tab で入力）` : '質問を入力'}${
+                agentId === 'local-agent' ? '　@ で MCP、/ でツールを指定' : '　/ でツールを指定'
+              }`}
+              className="w-full rounded-xl border border-[var(--line)] bg-[var(--surface-strong)] px-4 py-2 text-sm text-[var(--sea-ink)]"
+            />
+            {suggestions.length > 0 && (
+              <ul
+                id="chat-suggestions"
+                role="listbox"
+                className="absolute bottom-full left-0 z-10 mb-2 max-h-72 w-full overflow-y-auto rounded-xl border border-[var(--line)] bg-[var(--surface-strong)] p-1 shadow-lg"
+              >
+                {suggestions.map((suggestion, i) => (
+                  <li
+                    key={suggestion.value}
+                    id={`chat-suggestion-${i}`}
+                    role="option"
+                    aria-selected={i === highlighted}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onMouseEnter={() => setActiveIndex(i)}
+                    onClick={() => selectSuggestion(suggestion)}
+                    className={`cursor-pointer rounded-lg px-3 py-1.5 text-sm text-[var(--sea-ink)] ${
+                      i === highlighted ? 'bg-[var(--link-bg-hover)]' : ''
+                    }`}
+                  >
+                    <span className="font-medium">
+                      {trigger ? `${trigger.char}${suggestion.value}` : suggestion.value}
+                    </span>
+                    {suggestion.description && (
+                      <span className="ml-2 truncate text-xs text-[var(--sea-ink-soft)]">{suggestion.description}</span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
           <button
             type="submit"
             disabled={pending || !input.trim()}
