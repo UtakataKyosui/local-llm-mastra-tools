@@ -20,8 +20,11 @@ export const customAgentSchema = z.object({
   name: z.string().trim().min(1, '名前を入力してください'),
   description: z.string().default(''),
   instructions: z.string().trim().min(1, '指示文を入力してください'),
-  model: z.string().trim().default(''),
+  // Tried in order; later models are fallbacks when an earlier one fails.
+  models: z.array(z.string().min(1)).default([]),
   mcpServerIds: z.array(z.string()).default([]),
+  // Model-facing tool names (`<serverId>_<tool>`). A selected server with none of its tools listed exposes all of them.
+  mcpToolNames: z.array(z.string()).default([]),
   builtinTools: z.array(z.enum(builtinToolNames)).default([]),
   maxSteps: z.number().int().min(1).max(50).nullable().default(null),
 });

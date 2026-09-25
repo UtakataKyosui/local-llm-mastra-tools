@@ -1,3 +1,4 @@
+import { sql } from 'drizzle-orm';
 import { index, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 
 export const feedSources = sqliteTable('feed_sources', {
@@ -32,8 +33,9 @@ export const customAgents = sqliteTable('custom_agents', {
   name: text('name').notNull(),
   description: text('description').notNull().default(''),
   instructions: text('instructions').notNull(),
-  model: text('model').notNull().default(''),
+  models: text('models', { mode: 'json' }).$type<string[]>().notNull().default(sql`'[]'`),
   mcpServerIds: text('mcp_server_ids', { mode: 'json' }).$type<string[]>().notNull(),
+  mcpToolNames: text('mcp_tool_names', { mode: 'json' }).$type<string[]>().notNull().default(sql`'[]'`),
   builtinTools: text('builtin_tools', { mode: 'json' }).$type<string[]>().notNull(),
   maxSteps: integer('max_steps'),
 });

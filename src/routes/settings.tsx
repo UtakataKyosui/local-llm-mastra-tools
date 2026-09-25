@@ -1,11 +1,14 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { useEffect, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
+import { MultiSelect } from '#/components/MultiSelect';
 import {
   checkMcpServer,
   getCustomAgents,
   getFeedSources,
   getMcpServers,
+  getMcpToolOptions,
+  getOllamaModels,
   removeCustomAgent,
   removeFeedSource,
   removeMcpServer,
@@ -23,6 +26,8 @@ export const Route = createFileRoute('/settings')({
 type FeedSource = Awaited<ReturnType<typeof getFeedSources>>[number];
 type McpServer = Awaited<ReturnType<typeof getMcpServers>>[number];
 type CustomAgent = Awaited<ReturnType<typeof getCustomAgents>>[number];
+type McpToolOption = Awaited<ReturnType<typeof getMcpToolOptions>>[number];
+type OllamaModels = Awaited<ReturnType<typeof getOllamaModels>>;
 
 const inputClass =
   'min-w-0 rounded-xl border border-[var(--line)] bg-[var(--surface-strong)] px-3 py-2 text-sm text-[var(--sea-ink)]';
@@ -496,19 +501,27 @@ const emptyAgentForm = {
   name: '',
   description: '',
   instructions: '',
-  model: '',
+  models: [] as string[],
   mcpServerIds: [] as string[],
+  mcpToolNames: [] as string[],
   builtinTools: [] as BuiltinToolName[],
   maxSteps: '',
 };
 
-const builtinToolNames = Object.keys(BUILTIN_TOOL_LABELS) as BuiltinToolName[];
-
-const toggle = <T,>(list: T[], value: T) => (list.includes(value) ? list.filter((x) => x !== value) : [...list, value]);
+const builtinToolOptions = (Object.keys(BUILTIN_TOOL_LABELS) as BuiltinToolName[]).map((name) => ({
+  value: name,
+  label: BUILTIN_TOOL_LABELS[name],
+}));
 
 function CustomAgentsSection() {
   const [agents, setAgents] = useState<CustomAgent[]>([]);
   const [servers, setServers] = useState<McpServer[]>([]);
+  const [ollamaModels, setOllamaModels] = useState<OllamaModels>({
+    models: [],
+    defaultModel: '',
+  });
+  const [toolOptions, setToolOptions] = useState<McpToolOption[]>([]);
+  const [loadingTools, setLoadingTools] = useState(false);
   const [form, setForm] = useState(emptyAgentForm);
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState('');
@@ -523,7 +536,55 @@ function CustomAgentsSection() {
     getMcpServers()
       .then(setServers)
       .catch((e) => setError(errorMessage(e)));
+    getOllamaModels()
+      .then(setOllamaModels)
+      .catch((e) => setError(`Ollama のモデル一覧を取得できませんでした: ${errorMessage(e)}`));
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoadingTools(true);
+    getMcpToolOptions({ data: { serverIds: form.mcpServerIds } })
+      .then((options) => {
+        if (!cancelled) setToolOptions(options);
+      })
+      .catch((e) => {
+        if (!cancelled) setError(errorMessage(e));
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingTools(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [form.mcpServerIds]);
+
+  const changeServers = (mcpServerIds: string[]) => {
+    const serverOf = new Map(toolOptions.map((tool) => [tool.name, tool.serverId]));
+    // Drop tool selections of servers that were removed; keep ones whose server is unknown until the list loads.
+    const mcpToolNames = form.mcpToolNames.filter((name) => {
+      const serverId = serverOf.get(name);
+      return serverId === undefined || mcpServerIds.includes(serverId);
+    });
+    setForm({ ...form, mcpServerIds, mcpToolNames });
+  };
+
+  const supportsTools = new Map(ollamaModels.models.map((model) => [model.name, model.supportsTools]));
+  const toolModelNames = ollamaModels.models.filter((model) => model.supportsTools).map((model) => model.name);
+  const modelOptions = [...new Set([...toolModelNames, ...ollamaModels.models.map((m) => m.name), ...form.models])].map(
+    (name) => ({
+      value: name,
+      description: [
+        supportsTools.get(name) === undefined ? 'Ollama に未インストール' : supportsTools.get(name) ? 'ツール対応' : 'ツール非対応',
+        name === ollamaModels.defaultModel ? '既定のモデル' : '',
+      ]
+        .filter(Boolean)
+        .join(' / '),
+    }),
+  );
+  const usesTools = form.mcpServerIds.length > 0 || form.builtinTools.length > 0;
+  const effectiveModels = form.models.length > 0 ? form.models : [ollamaModels.defaultModel].filter(Boolean);
+  const modelsWithoutTools = effectiveModels.filter((name) => supportsTools.get(name) === false);
 
   const reset = () => {
     setForm(emptyAgentForm);
@@ -576,9 +637,13 @@ function CustomAgentsSection() {
             <span className="font-mono text-xs text-[var(--sea-ink-soft)]">{agent.id}</span>
             <span className="min-w-0 flex-1 truncate text-xs text-[var(--sea-ink-soft)]">
               {[
+                agent.models.length > 0 ? `Model: ${agent.models.join(' → ')}` : '',
                 ...agent.mcpServerIds.map((id) => `MCP: ${id}`),
+                agent.mcpToolNames.length > 0 ? `ツール: ${agent.mcpToolNames.length} 個に絞り込み` : '',
                 ...agent.builtinTools.map((name) => BUILTIN_TOOL_LABELS[name]),
-              ].join(' / ') || 'ツールなし'}
+              ]
+                .filter(Boolean)
+                .join(' / ') || 'ツールなし'}
             </span>
             <button type="button" className={buttonClass} onClick={() => edit(agent)}>
               編集
@@ -620,55 +685,68 @@ function CustomAgentsSection() {
           onChange={(e) => setForm({ ...form, instructions: e.target.value })}
           required
         />
-        <input
-          className={inputClass}
-          placeholder="Ollama モデル (空なら既定のモデル)"
-          value={form.model}
-          onChange={(e) => setForm({ ...form, model: e.target.value })}
+        <div className="sm:col-span-2">
+          <MultiSelect
+            label="モデル（上から順に試し、失敗したら次のモデルを使う。空なら既定のモデル）"
+            options={modelOptions}
+            value={form.models}
+            onChange={(models) => setForm({ ...form, models })}
+            placeholder={ollamaModels.defaultModel ? `既定: ${ollamaModels.defaultModel}` : 'モデルを選択'}
+            emptyMessage="Ollama にモデルがありません"
+            ordered
+          />
+          <p className="m-0 mt-1 text-xs text-[var(--sea-ink-soft)]">
+            ツール対応モデル（Ollama の capabilities で判定）:{' '}
+            {toolModelNames.length > 0 ? toolModelNames.join(', ') : 'インストール済みのモデルにはありません'}
+          </p>
+          {usesTools && modelsWithoutTools.length > 0 && (
+            <p className="m-0 mt-1 text-xs text-red-600">
+              {modelsWithoutTools.join(', ')} はツールに対応していないため、MCP・組み込みツールを使うとエラーになります。
+            </p>
+          )}
+        </div>
+        <MultiSelect
+          label="MCP サーバー"
+          options={servers.map((server) => ({
+            value: server.id,
+            description: server.enabled ? server.transport : '無効（Settings で有効にするまで使えません）',
+          }))}
+          value={form.mcpServerIds}
+          onChange={changeServers}
+          placeholder="使う MCP サーバーを選択"
+          emptyMessage="登録された MCP サーバーがありません"
+        />
+        <MultiSelect
+          label={loadingTools ? 'MCP ツール（読み込み中…）' : 'MCP ツール（選ばなかったサーバーは全ツールを使う）'}
+          options={toolOptions.map((tool) => ({
+            value: tool.name,
+            group: tool.serverId,
+            description: tool.description,
+          }))}
+          value={form.mcpToolNames}
+          onChange={(mcpToolNames) => setForm({ ...form, mcpToolNames })}
+          placeholder={form.mcpServerIds.length === 0 ? '先に MCP サーバーを選択' : '絞り込むツールを選択'}
+          emptyMessage={
+            form.mcpServerIds.length === 0 ? 'MCP サーバーが選ばれていません' : '有効なサーバーのツールがありません'
+          }
+        />
+        <MultiSelect
+          label="組み込みツール"
+          options={builtinToolOptions}
+          value={form.builtinTools}
+          onChange={(builtinTools) => setForm({ ...form, builtinTools: builtinTools as BuiltinToolName[] })}
+          placeholder="使う組み込みツールを選択"
         />
         <input
           className={inputClass}
           type="number"
           min={1}
           max={50}
+          aria-label="最大ステップ数"
           placeholder="最大ステップ数 (空なら既定)"
           value={form.maxSteps}
           onChange={(e) => setForm({ ...form, maxSteps: e.target.value })}
         />
-        <fieldset className="m-0 flex flex-wrap items-center gap-2 border-0 p-0 text-xs text-[var(--sea-ink-soft)] sm:col-span-2">
-          <legend className="mb-1 p-0">MCP サーバー</legend>
-          {servers.length === 0 && <span>登録された MCP サーバーがありません。</span>}
-          {servers.map((server) => (
-            <label
-              key={server.id}
-              className="flex cursor-pointer items-center gap-1 rounded-full border border-[var(--line)] px-2 py-0.5"
-            >
-              <input
-                type="checkbox"
-                checked={form.mcpServerIds.includes(server.id)}
-                onChange={() => setForm({ ...form, mcpServerIds: toggle(form.mcpServerIds, server.id) })}
-              />
-              {server.id}
-              {!server.enabled && '（無効）'}
-            </label>
-          ))}
-        </fieldset>
-        <fieldset className="m-0 flex flex-wrap items-center gap-2 border-0 p-0 text-xs text-[var(--sea-ink-soft)] sm:col-span-2">
-          <legend className="mb-1 p-0">組み込みツール</legend>
-          {builtinToolNames.map((name) => (
-            <label
-              key={name}
-              className="flex cursor-pointer items-center gap-1 rounded-full border border-[var(--line)] px-2 py-0.5"
-            >
-              <input
-                type="checkbox"
-                checked={form.builtinTools.includes(name)}
-                onChange={() => setForm({ ...form, builtinTools: toggle(form.builtinTools, name) })}
-              />
-              {BUILTIN_TOOL_LABELS[name]}
-            </label>
-          ))}
-        </fieldset>
         <div className="flex flex-wrap gap-2 sm:col-span-2">
           <button type="submit" className={primaryButtonClass}>
             {editing ? '更新' : '作成'}

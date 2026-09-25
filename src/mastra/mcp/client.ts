@@ -34,17 +34,22 @@ const getClient = async () => {
   return client;
 };
 
-export const listExternalMcpTools = async (serverIds?: string[]) => {
+// Tool names are prefixed with the server id, which is how the model sees them.
+export const listExternalMcpToolsets = async (serverIds?: string[]) => {
   const { toolsets, errors } = await (await getClient()).listToolsetsWithErrors();
   for (const [serverId, error] of Object.entries(errors ?? {})) {
     console.error(`MCP server "${serverId}" failed to connect:`, error);
   }
-  return Object.fromEntries(
-    Object.entries(toolsets)
-      .filter(([serverId]) => !serverIds || serverIds.includes(serverId))
-      .flatMap(([serverId, tools]) => Object.entries(tools).map(([name, tool]) => [`${serverId}_${name}`, tool])),
-  );
+  return Object.entries(toolsets)
+    .filter(([serverId]) => !serverIds || serverIds.includes(serverId))
+    .map(([serverId, tools]) => ({
+      serverId,
+      tools: Object.fromEntries(Object.entries(tools).map(([name, tool]) => [`${serverId}_${name}`, tool])),
+    }));
 };
+
+export const listExternalMcpTools = async (serverIds?: string[]) =>
+  Object.assign({}, ...(await listExternalMcpToolsets(serverIds)).map(({ tools }) => tools));
 
 export const testMcpServer = async (server: McpServerConfig) => {
   const client = new MCPClient({

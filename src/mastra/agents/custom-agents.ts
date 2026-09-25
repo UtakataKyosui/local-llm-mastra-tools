@@ -2,8 +2,8 @@ import { Agent } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import { Memory } from '@mastra/memory';
 import { asc, eq } from 'drizzle-orm';
-import { listExternalMcpTools } from '../mcp/client';
-import { ollamaModel } from '../models/ollama';
+import { listExternalMcpToolsets } from '../mcp/client';
+import { OLLAMA_BASE_URL, ollamaModel } from '../models/ollama';
 import { appDb, ensureAppSchema } from '../storage/app-db';
 import { customAgents } from '../storage/schema';
 import { appleFmTool } from '../tools/apple-fm-tool';
@@ -23,10 +23,60 @@ const builtinTools = {
   ollamaTool,
 } satisfies Record<BuiltinToolName, unknown>;
 
+const fetchModelCapabilities = async (name: string): Promise<string[]> => {
+  const res = await fetch(`${OLLAMA_BASE_URL}/api/show`, {
+    method: 'POST',
+    body: JSON.stringify({ model: name }),
+    signal: AbortSignal.timeout(5000),
+  });
+  if (!res.ok) return [];
+  const data = (await res.json()) as { capabilities?: string[] };
+  return data.capabilities ?? [];
+};
+
+// Capabilities come from Ollama itself, so "tools" reflects whether the model can call tools.
+export const listOllamaModels = async () => {
+  const res = await fetch(`${OLLAMA_BASE_URL}/api/tags`, { signal: AbortSignal.timeout(5000) });
+  if (!res.ok) throw new Error(`Ollama /api/tags returned ${res.status}`);
+  const data = (await res.json()) as { models?: { name: string }[] };
+  const names = (data.models ?? []).map((model) => model.name).sort();
+  return Promise.all(
+    names.map(async (name) => {
+      const capabilities = await fetchModelCapabilities(name);
+      return { name, capabilities, supportsTools: capabilities.includes('tools') };
+    }),
+  );
+};
+
+export const listMcpToolOptions = async (serverIds: string[]) => {
+  if (serverIds.length === 0) return [];
+  const toolsets = await listExternalMcpToolsets(serverIds);
+  return toolsets.flatMap(({ serverId, tools }) =>
+    Object.entries(tools).map(([name, tool]) => ({
+      serverId,
+      name,
+      description: (tool as { description?: string }).description ?? '',
+    })),
+  );
+};
+
 export const listCustomAgents = async (): Promise<CustomAgentConfig[]> => {
   await ensureAppSchema();
   const rows = await appDb.select().from(customAgents).orderBy(asc(customAgents.id));
   return rows.map((row) => customAgentSchema.parse(row));
+};
+
+const selectMcpTools = async (config: CustomAgentConfig) => {
+  if (config.mcpServerIds.length === 0) return {};
+  const selected = new Set(config.mcpToolNames);
+  const toolsets = await listExternalMcpToolsets(config.mcpServerIds);
+  return Object.fromEntries(
+    toolsets.flatMap(({ tools }) => {
+      const entries = Object.entries(tools);
+      const picked = entries.filter(([name]) => selected.has(name));
+      return picked.length > 0 ? picked : entries;
+    }),
+  );
 };
 
 const buildAgent = (config: CustomAgentConfig) =>
@@ -35,10 +85,13 @@ const buildAgent = (config: CustomAgentConfig) =>
     name: config.name,
     description: config.description,
     instructions: config.instructions,
-    model: ollamaModel(config.model || undefined),
+    model:
+      config.models.length > 0
+        ? config.models.map((modelId) => ({ model: ollamaModel(modelId), maxRetries: 0 }))
+        : ollamaModel(),
     tools: async () => ({
       ...Object.fromEntries(config.builtinTools.map((name) => [name, builtinTools[name]])),
-      ...(config.mcpServerIds.length > 0 ? await listExternalMcpTools(config.mcpServerIds) : {}),
+      ...(await selectMcpTools(config)),
     }),
     memory: new Memory(),
     ...(config.maxSteps !== null && { defaultOptions: { maxSteps: config.maxSteps } }),

@@ -1,0 +1,1 @@
+ALTER TABLE `custom_agents` DROP COLUMN `model`;

@@ -56,6 +56,19 @@ export const upsertCustomAgent = createServerFn({ method: 'POST' })
     await saveCustomAgent(data);
   });
 
+export const getOllamaModels = createServerFn({ method: 'GET' }).handler(async () => {
+  const { listOllamaModels } = await import('../mastra/agents/custom-agents');
+  const { OLLAMA_MODEL } = await import('../mastra/models/ollama');
+  return { models: await listOllamaModels(), defaultModel: OLLAMA_MODEL };
+});
+
+export const getMcpToolOptions = createServerFn({ method: 'POST' })
+  .inputValidator(z.object({ serverIds: z.array(z.string()) }))
+  .handler(async ({ data }) => {
+    const { listMcpToolOptions } = await import('../mastra/agents/custom-agents');
+    return listMcpToolOptions(data.serverIds);
+  });
+
 export const removeCustomAgent = createServerFn({ method: 'POST' })
   .inputValidator(idInput)
   .handler(async ({ data }) => {
