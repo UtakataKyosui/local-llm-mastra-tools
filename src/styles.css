@@ -227,3 +227,101 @@ a {
     bottom: -4px;
   }
 }
+
+.chat-markdown {
+  font-size: 0.875rem;
+  line-height: 1.75;
+  overflow-wrap: anywhere;
+}
+
+.chat-markdown > :first-child {
+  margin-top: 0;
+}
+
+.chat-markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.chat-markdown :where(p, ul, ol, pre, blockquote, table) {
+  margin: 0.6em 0;
+}
+
+.chat-markdown :where(h1, h2, h3, h4) {
+  margin: 1em 0 0.4em;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.chat-markdown h1 {
+  font-size: 1.25em;
+}
+
+.chat-markdown h2 {
+  font-size: 1.15em;
+}
+
+.chat-markdown :where(h3, h4) {
+  font-size: 1em;
+}
+
+.chat-markdown :where(ul, ol) {
+  padding-left: 1.4em;
+}
+
+.chat-markdown ul {
+  list-style: disc;
+}
+
+.chat-markdown ol {
+  list-style: decimal;
+}
+
+.chat-markdown li + li {
+  margin-top: 0.2em;
+}
+
+.chat-markdown a {
+  color: var(--lagoon-deep);
+  text-decoration: underline;
+}
+
+.chat-markdown :not(pre) > code {
+  padding: 0.1em 0.35em;
+  border-radius: 0.35em;
+  background: var(--chip-bg);
+  border: 1px solid var(--line);
+  font-size: 0.9em;
+}
+
+.chat-markdown pre {
+  overflow-x: auto;
+  padding: 0.75em 1em;
+  border-radius: 0.75em;
+  background: var(--foam);
+  border: 1px solid var(--line);
+  font-size: 0.85em;
+  line-height: 1.6;
+}
+
+.chat-markdown blockquote {
+  padding-left: 0.9em;
+  border-left: 3px solid var(--line);
+  color: var(--sea-ink-soft);
+}
+
+.chat-markdown table {
+  display: block;
+  overflow-x: auto;
+  border-collapse: collapse;
+}
+
+.chat-markdown :where(th, td) {
+  padding: 0.35em 0.7em;
+  border: 1px solid var(--line);
+  text-align: left;
+}
+
+.chat-markdown hr {
+  margin: 1em 0;
+  border-color: var(--line);
+}

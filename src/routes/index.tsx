@@ -1,6 +1,7 @@
 import { Link, createFileRoute } from '@tanstack/react-router';
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent, KeyboardEvent } from 'react';
+import { ChatMarkdown } from '#/components/ChatMarkdown';
 import { getAgentTools } from '#/lib/agent-tools.functions';
 import {
   PRESET_PROMPTS,
@@ -315,7 +316,11 @@ function Agents() {
                   Tools: {message.toolCalls.join(' → ')}
                 </p>
               )}
-              <p className="m-0 whitespace-pre-wrap break-words text-sm leading-7">{message.content}</p>
+              {message.role === 'assistant' ? (
+                <ChatMarkdown content={message.content} />
+              ) : (
+                <p className="m-0 whitespace-pre-wrap break-words text-sm leading-7">{message.content}</p>
+              )}
             </div>
           ))}
           {pending && <p className="text-sm text-[var(--sea-ink-soft)]">考え中…（ローカルモデルで調査しています）</p>}
